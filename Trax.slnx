@@ -1,3 +1,7 @@
 <Solution>
   <Project Path="Trax.BlazorApp/Trax.BlazorApp.csproj" />
+  <Project Path="Trax.Domain/Trax.Domain.csproj" />
+  <Project Path="Trax.Application/Trax.Application.csproj" />
+  <Project Path="Trax.Infrastructure/Trax.Infrastructure.csproj" />
+  <Project Path="Trax.Database/Trax.Database.csproj" />
 </Solution>

@@ -12,8 +12,37 @@ Trax is a web application for tracking the donation, warehousing, and distributi
 
 ## Tech Stack
 - **Frontend:** Blazor (C#) with MudBlazor UI framework
-- **Database:** Supabase
+- **Database:** Supabase (PostgreSQL, database name: `trax`)
+- **ORM:** Entity Framework Core 9 with Npgsql provider
+- **Auth:** Supabase Auth + Google OAuth 2.0
 - **Design:** Responsive, user-friendly, clean and modern interface
+
+## Architecture
+The application follows **Clean Architecture** with the following layers and patterns:
+
+### Project Structure
+```
+Trax.Domain        - Entities, enums, interfaces, base specification
+Trax.Application   - Services, use-case interfaces, specifications
+Trax.Infrastructure - EF Core DbContext, repository implementations, data seeding
+Trax.Database      - Console app for deploying EF Core migrations to Supabase
+Trax.BlazorApp     - Blazor Server UI (references Application + Infrastructure)
+```
+
+### Patterns
+- **Repository Pattern** — `IRepository<T>` abstraction over EF Core, registered as open generic
+- **Specification Pattern** — `ISpecification<T>` / `BaseSpecification<T>` for composable, reusable queries
+- **Dependency Inversion** — UI and Application layers depend only on abstractions defined in Domain
+
+### Database Project (`Trax.Database`)
+- Standalone console app used to deploy and manage the Supabase schema
+- Acts as the single source of truth for database structure via EF Core migrations
+- Supports `dotnet ef migrations add`, `dotnet ef database update`, and SQL script generation
+- Contains a `DesignTimeDbContextFactory` for tooling support
+
+### Data Seeding
+- `ItemCategory` seed data (Furniture, Appliances, Clothing, Electronics, etc.) applied on first run
+- Super Admin user (`tom.c.christensen@gmail.com`) seeded at startup if not present
 
 ## User Roles & Authentication
 - Define roles: Super Admin, Admin, Volunteer, Organization, Donor
@@ -22,7 +51,7 @@ Trax is a web application for tracking the donation, warehousing, and distributi
 - Role-based access control (who can see/do what)
 
 ### Super Admin
-- `tom.c.christensen@gmail.com` is the designated Super Admin
+- `tom.c.christensen@gmail.com` is the designated Super Admin 
 - Super Admin account is seeded at startup and cannot be deleted or demoted
 - Super Admin can grant and revoke any role to any Google-authenticated user
 - Super Admin has full access to all application features and data
