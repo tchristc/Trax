@@ -427,3 +427,4 @@ FodyWeavers.xsd
 *.msm
 *.msp
 /trax-gc-one-time-setup.ps1
+/trax-create-github-workload-identity-federation-pool-provider.ps1
