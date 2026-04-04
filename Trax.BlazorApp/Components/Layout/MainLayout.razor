@@ -10,7 +10,16 @@
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="ToggleDrawer" />
         <MudText Typo="Typo.h6" Class="ml-2">Trax</MudText>
         <MudSpacer />
-        <MudText Typo="Typo.body2" Color="Color.Inherit" Class="mr-2">Donation Management</MudText>
+        @if (_userName is not null)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Inherit" Class="mr-3">@_userName</MudText>
+            <form method="post" action="/auth/logout" style="display:inline">
+                <AntiforgeryToken />
+                <MudTooltip Text="Sign out">
+                    <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit" ButtonType="ButtonType.Submit" />
+                </MudTooltip>
+            </form>
+        }
     </MudAppBar>
 
     <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
@@ -25,7 +34,11 @@
 </MudLayout>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
     private bool _drawerOpen = true;
+    private string? _userName;
 
     private readonly MudTheme _theme = new()
     {
@@ -39,6 +52,12 @@
             DrawerText = "rgba(0,0,0,0.87)"
         }
     };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateTask;
+        _userName = state.User.Identity?.Name;
+    }
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 }
