@@ -1,3 +1,4 @@
+using MudBlazor.Services;
 using Trax.Application;
 using Trax.BlazorApp.Components;
 using Trax.Infrastructure;
@@ -8,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddMudServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddApplicationServices();
 

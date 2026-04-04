@@ -1,0 +1,134 @@
+@inject IInventoryService InventoryService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(Donation.Id == Guid.Empty ? "Create Donation" : "Edit Donation")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Donation.DonorName" Label="Donor Name"
+                                  Required="true" RequiredError="Donor name is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Donation.DonorEmail" Label="Donor Email"
+                                  InputType="InputType.Email"
+                                  Required="true" RequiredError="Donor email is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Donation.DonorPhone" Label="Donor Phone" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_dateReceived" Label="Date Received"
+                                   Required="true" RequiredError="Date is required" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="Donation.PickupAddress" Label="Pickup Address" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="DonationStatus" @bind-Value="Donation.Status" Label="Status">
+                        @foreach (var s in Enum.GetValues<DonationStatus>())
+                        {
+                            <MudSelectItem T="DonationStatus" Value="s">@s</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="Donation.Notes" Label="Notes" Lines="3" />
+                </MudItem>
+            </MudGrid>
+
+            @if (Donation.Id == Guid.Empty)
+            {
+                <MudDivider Class="my-4" />
+                <div class="d-flex align-center justify-space-between mb-2">
+                    <MudText Typo="Typo.subtitle1">Items</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add" OnClick="AddItem">
+                        Add Item
+                    </MudButton>
+                </div>
+
+                @for (var i = 0; i < _items.Count; i++)
+                {
+                    var idx = i;
+                    <MudPaper Outlined Class="pa-3 mb-2">
+                        <MudGrid>
+                            <MudItem xs="12" sm="4">
+                                <MudTextField @bind-Value="_items[idx].Name" Label="Item Name"
+                                              Required="true" RequiredError="Name required" />
+                            </MudItem>
+                            <MudItem xs="6" sm="3">
+                                <MudSelect T="Guid" @bind-Value="_items[idx].CategoryId" Label="Category">
+                                    @foreach (var cat in _categories)
+                                    {
+                                        <MudSelectItem T="Guid" Value="cat.Id">@cat.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="6" sm="2">
+                                <MudSelect T="ItemCondition" @bind-Value="_items[idx].Condition" Label="Condition">
+                                    @foreach (var c in Enum.GetValues<ItemCondition>())
+                                    {
+                                        <MudSelectItem T="ItemCondition" Value="c">@c</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="8" sm="2">
+                                <MudNumericField @bind-Value="_items[idx].Quantity" Label="Qty" Min="1" />
+                            </MudItem>
+                            <MudItem xs="4" sm="1" Class="d-flex align-end">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                               Size="Size.Small" OnClick="@(() => RemoveItem(idx))" />
+                            </MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                }
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="!_isValid">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Donation Donation { get; set; } = new();
+
+    private MudForm _form = default!;
+    private bool _isValid;
+    private DateTime? _dateReceived;
+    private List<DonationItem> _items = [];
+    private IReadOnlyList<ItemCategory> _categories = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dateReceived = Donation.DateReceived == default ? DateTime.Today : Donation.DateReceived.ToLocalTime().Date;
+        _categories = await InventoryService.GetCategoriesAsync();
+    }
+
+    private void AddItem() => _items.Add(new DonationItem { Quantity = 1 });
+
+    private void RemoveItem(int index) => _items.RemoveAt(index);
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_form.IsValid) return;
+
+        Donation.DateReceived = _dateReceived?.ToUniversalTime() ?? DateTime.UtcNow;
+
+        if (Donation.Id == Guid.Empty)
+        {
+            foreach (var item in _items)
+                Donation.Items.Add(item);
+        }
+
+        MudDialog.Close(DialogResult.Ok(Donation));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

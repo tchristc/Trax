@@ -1,0 +1,145 @@
+@page "/volunteers"
+@inject IVolunteerService VolunteerService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Volunteers - Trax</PageTitle>
+
+<div class="d-flex align-center justify-space-between mb-4">
+    <MudText Typo="Typo.h4">Volunteers</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
+               OnClick="CreateVolunteer">
+        New Volunteer
+    </MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Elevation="2">
+        <MudTable T="Volunteer" Items="_volunteers" Hover Dense Striped Filter="_filterFunc">
+            <ToolBarContent>
+                <MudTextField @bind-Value="_search" Placeholder="Search by name or email..."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium" Immediate Class="mt-0 flex-grow-1" />
+                <MudSpacer />
+                <MudToggleIconButton @bind-Toggled="_activeOnly"
+                                     Icon="@Icons.Material.Filled.ToggleOff"
+                                     ToggledIcon="@Icons.Material.Filled.ToggleOn"
+                                     ToggledColor="Color.Primary"
+                                     Title="@(_activeOnly ? "Active Only" : "All")" />
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<Volunteer, object>(x => x.LastName)">Name</MudTableSortLabel></MudTh>
+                <MudTh>Email</MudTh>
+                <MudTh>Phone</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<Volunteer, object>(x => x.CreatedAt)">Joined</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">
+                    <div class="d-flex align-center gap-2">
+                        <MudAvatar Color="Color.Primary" Size="Size.Small">
+                            @context.FirstName[0]@context.LastName[0]
+                        </MudAvatar>
+                        <span>@context.FirstName @context.LastName</span>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Email">@context.Email</MudTd>
+                <MudTd DataLabel="Phone">@(context.Phone ?? "—")</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Joined">@context.CreatedAt.ToLocalTime().ToString("MM/dd/yyyy")</MudTd>
+                <MudTd Style="text-align:right">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => EditVolunteer(context))" Title="Edit" />
+                    <MudIconButton Icon="@(context.IsActive ? Icons.Material.Filled.ToggleOff : Icons.Material.Filled.ToggleOn)"
+                                   Size="Size.Small" Color="@(context.IsActive ? Color.Warning : Color.Success)"
+                                   OnClick="@(() => ToggleActive(context))"
+                                   Title="@(context.IsActive ? "Deactivate" : "Activate")" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4" Color="Color.Secondary">No volunteers found.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private IReadOnlyList<Volunteer> _volunteers = [];
+    private string _search = string.Empty;
+    private bool _activeOnly;
+
+    private Func<Volunteer, bool> _filterFunc => x =>
+    {
+        if (_activeOnly && !x.IsActive) return false;
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        var fullName = $"{x.FirstName} {x.LastName}";
+        return fullName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+               x.Email.Contains(_search, StringComparison.OrdinalIgnoreCase);
+    };
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        _volunteers = await VolunteerService.GetAllVolunteersAsync();
+        _loading = false;
+    }
+
+    private async Task CreateVolunteer()
+    {
+        var parameters = new DialogParameters<VolunteerFormDialog>
+        {
+            { x => x.Volunteer, new Volunteer() }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<VolunteerFormDialog>("New Volunteer", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is Volunteer volunteer)
+        {
+            await VolunteerService.CreateVolunteerAsync(volunteer);
+            await LoadData();
+            Snackbar.Add("Volunteer created.", Severity.Success);
+        }
+    }
+
+    private async Task EditVolunteer(Volunteer volunteer)
+    {
+        var parameters = new DialogParameters<VolunteerFormDialog>
+        {
+            { x => x.Volunteer, volunteer }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<VolunteerFormDialog>("Edit Volunteer", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is Volunteer updated)
+        {
+            await VolunteerService.UpdateVolunteerAsync(updated);
+            await LoadData();
+            Snackbar.Add("Volunteer updated.", Severity.Success);
+        }
+    }
+
+    private async Task ToggleActive(Volunteer volunteer)
+    {
+        volunteer.IsActive = !volunteer.IsActive;
+        await VolunteerService.UpdateVolunteerAsync(volunteer);
+        await LoadData();
+        Snackbar.Add($"Volunteer {(volunteer.IsActive ? "activated" : "deactivated")}.", Severity.Info);
+    }
+}

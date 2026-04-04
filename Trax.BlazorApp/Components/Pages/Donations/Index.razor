@@ -1,0 +1,170 @@
+@page "/donations"
+@inject IDonationService DonationService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Donations - Trax</PageTitle>
+
+<div class="d-flex align-center justify-space-between mb-4">
+    <MudText Typo="Typo.h4">Donations</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="CreateDonation">
+        New Donation
+    </MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Elevation="2">
+        <MudTable T="Donation" Items="_donations" Hover Dense Striped Filter="_filterFunc">
+            <ToolBarContent>
+                <MudTextField @bind-Value="_search" Placeholder="Search by donor name or email..."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium" Immediate Class="mt-0 flex-grow-1" />
+                <MudSpacer />
+                <MudSelect T="DonationStatus?" @bind-Value="_statusFilter" Label="Status" Clearable
+                           Style="min-width:160px" Class="ml-4">
+                    @foreach (var s in Enum.GetValues<DonationStatus>())
+                    {
+                        <MudSelectItem T="DonationStatus?" Value="(DonationStatus?)s">@s</MudSelectItem>
+                    }
+                </MudSelect>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<Donation, object>(x => x.DonorName)">Donor</MudTableSortLabel></MudTh>
+                <MudTh>Email</MudTh>
+                <MudTh>Phone</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<Donation, object>(x => x.DateReceived)">Date Received</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<Donation, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Donor">@context.DonorName</MudTd>
+                <MudTd DataLabel="Email">@context.DonorEmail</MudTd>
+                <MudTd DataLabel="Phone">@(context.DonorPhone ?? "—")</MudTd>
+                <MudTd DataLabel="Date">@context.DateReceived.ToLocalTime().ToString("MM/dd/yyyy")</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                </MudTd>
+                <MudTd Style="text-align:right">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => EditDonation(context))" Title="Edit" />
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense>
+                        @foreach (var s in Enum.GetValues<DonationStatus>())
+                        {
+                            var status = s;
+                            <MudMenuItem OnClick="@(() => UpdateStatus(context, status))">
+                                Set: @status
+                            </MudMenuItem>
+                        }
+                    </MudMenu>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteDonation(context))" Title="Delete" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4" Color="Color.Secondary">No donations found.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private IReadOnlyList<Donation> _donations = [];
+    private string _search = string.Empty;
+    private DonationStatus? _statusFilter;
+
+    private Func<Donation, bool> _filterFunc => x =>
+    {
+        if (_statusFilter.HasValue && x.Status != _statusFilter.Value) return false;
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return x.DonorName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+               x.DonorEmail.Contains(_search, StringComparison.OrdinalIgnoreCase);
+    };
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        _donations = await DonationService.GetAllDonationsAsync();
+        _loading = false;
+    }
+
+    private async Task CreateDonation()
+    {
+        var parameters = new DialogParameters<DonationFormDialog>
+        {
+            { x => x.Donation, new Donation { DateReceived = DateTime.UtcNow } }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<DonationFormDialog>("Create Donation", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is Donation donation)
+        {
+            await DonationService.CreateDonationAsync(donation);
+            await LoadData();
+            Snackbar.Add("Donation created successfully.", Severity.Success);
+        }
+    }
+
+    private async Task EditDonation(Donation donation)
+    {
+        var parameters = new DialogParameters<DonationFormDialog>
+        {
+            { x => x.Donation, donation }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<DonationFormDialog>("Edit Donation", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is Donation updated)
+        {
+            await DonationService.UpdateDonationAsync(updated);
+            await LoadData();
+            Snackbar.Add("Donation updated.", Severity.Success);
+        }
+    }
+
+    private async Task UpdateStatus(Donation donation, DonationStatus status)
+    {
+        await DonationService.UpdateDonationStatusAsync(donation.Id, status);
+        await LoadData();
+        Snackbar.Add($"Status updated to {status}.", Severity.Info);
+    }
+
+    private async Task DeleteDonation(Donation donation)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Title, "Delete Donation" },
+            { x => x.Message, $"Delete donation from {donation.DonorName}? This cannot be undone." },
+            { x => x.ConfirmText, "Delete" }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Donation", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+        var result = await dialog.Result;
+        if (!result.Canceled)
+        {
+            await DonationService.DeleteDonationAsync(donation.Id);
+            await LoadData();
+            Snackbar.Add("Donation deleted.", Severity.Warning);
+        }
+    }
+
+    private static Color GetStatusColor(DonationStatus status) => status switch
+    {
+        DonationStatus.Pending => Color.Warning,
+        DonationStatus.Scheduled => Color.Info,
+        DonationStatus.PickedUp => Color.Primary,
+        DonationStatus.Received or DonationStatus.Completed => Color.Success,
+        _ => Color.Default
+    };
+}
