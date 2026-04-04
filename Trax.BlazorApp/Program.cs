@@ -9,6 +9,15 @@ using Trax.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Cloud Run's load balancer IP is not a loopback address, so we must clear
+    // the default allow-list to trust all upstream proxies.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
@@ -33,6 +42,9 @@ builder.Services.AddCascadingAuthenticationState();
 
 var app = builder.Build();
 
+// Must be first — makes the app aware of the original scheme/IP before any other middleware.
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
@@ -40,13 +52,12 @@ if (app.Environment.IsDevelopment())
     await DataSeeder.SeedAsync(db);
 }
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
+
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 

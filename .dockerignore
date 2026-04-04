@@ -1,0 +1,13 @@
+**/.vs
+**/.vscode
+**/.git
+**/.gitignore
+**/bin
+**/obj
+**/*.user
+**/*.md
+**/appsettings.Development.json
+**/appsettings.*.json
+**/secrets.json
+**/Properties/launchSettings.json
+Trax.Database/
