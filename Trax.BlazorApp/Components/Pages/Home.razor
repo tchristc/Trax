@@ -1,7 +1,159 @@
 ﻿@page "/"
+@inject IDonationService DonationService
+@inject IInventoryService InventoryService
+@inject IOrganizationService OrganizationService
+@inject IVolunteerService VolunteerService
+@inject ISchedulingService SchedulingService
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Dashboard - Trax</PageTitle>
 
-<h1>Hello, world!</h1>
+<MudText Typo="Typo.h4" GutterBottom>Dashboard</MudText>
 
-Welcome to your new app.
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate Color="Color.Primary" Class="mb-4" />
+}
+
+<MudGrid>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4 rounded-lg">
+            <div class="d-flex align-center gap-4">
+                <MudIcon Icon="@Icons.Material.Filled.CardGiftcard" Color="Color.Primary" Size="Size.Large" />
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Total Donations</MudText>
+                    <MudText Typo="Typo.h4">@_totalDonations</MudText>
+                </div>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4 rounded-lg">
+            <div class="d-flex align-center gap-4">
+                <MudIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Secondary" Size="Size.Large" />
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Warehoused Items</MudText>
+                    <MudText Typo="Typo.h4">@_warehousedItems</MudText>
+                </div>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4 rounded-lg">
+            <div class="d-flex align-center gap-4">
+                <MudIcon Icon="@Icons.Material.Filled.Business" Color="Color.Success" Size="Size.Large" />
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Active Organizations</MudText>
+                    <MudText Typo="Typo.h4">@_activeOrganizations</MudText>
+                </div>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4 rounded-lg">
+            <div class="d-flex align-center gap-4">
+                <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Warning" Size="Size.Large" />
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Active Volunteers</MudText>
+                    <MudText Typo="Typo.h4">@_activeVolunteers</MudText>
+                </div>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudGrid Class="mt-6">
+    <MudItem xs="12" md="8">
+        <MudPaper Elevation="2" Class="pa-4">
+            <MudText Typo="Typo.h6" GutterBottom>Recent Donations</MudText>
+            <MudTable T="Donation" Items="_recentDonations" Dense Hover Elevation="0">
+                <HeaderContent>
+                    <MudTh>Donor</MudTh>
+                    <MudTh>Email</MudTh>
+                    <MudTh>Date Received</MudTh>
+                    <MudTh>Status</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Donor">@context.DonorName</MudTd>
+                    <MudTd DataLabel="Email">@context.DonorEmail</MudTd>
+                    <MudTd DataLabel="Date">@context.DateReceived.ToLocalTime().ToString("MM/dd/yyyy")</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@GetDonationStatusColor(context.Status)">@context.Status</MudChip>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Class="pa-4" Color="Color.Secondary">No donations recorded yet.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudPaper Elevation="2" Class="pa-4" Style="height:100%;">
+            <MudText Typo="Typo.h6" GutterBottom>Upcoming (7 Days)</MudText>
+            @if (!_loading && _upcomingSchedule.Count == 0)
+            {
+                <MudText Color="Color.Secondary" Typo="Typo.body2">No upcoming pickups or deliveries.</MudText>
+            }
+            @foreach (var item in _upcomingSchedule)
+            {
+                <MudPaper Outlined Class="pa-3 mb-2 rounded">
+                    <div class="d-flex align-center justify-space-between mb-1">
+                        <MudText Typo="Typo.body2"><b>@item.Type</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@GetScheduleStatusColor(item.Status)">@item.Status</MudChip>
+                    </div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @item.ScheduledDate.ToLocalTime().ToString("ddd, MMM d")
+                    </MudText>
+                    @if (!string.IsNullOrEmpty(item.Address))
+                    {
+                        <MudText Typo="Typo.caption" Class="d-block mud-text-secondary">@item.Address</MudText>
+                    }
+                </MudPaper>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private bool _loading = true;
+    private int _totalDonations;
+    private int _warehousedItems;
+    private int _activeOrganizations;
+    private int _activeVolunteers;
+    private IReadOnlyList<Donation> _recentDonations = [];
+    private IReadOnlyList<PickupDelivery> _upcomingSchedule = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var donations = await DonationService.GetAllDonationsAsync();
+        var warehousedItems = await InventoryService.GetItemsByStatusAsync(ItemStatus.Warehoused);
+        var organizations = await OrganizationService.GetActiveOrganizationsAsync();
+        var volunteers = await VolunteerService.GetActiveVolunteersAsync();
+        _upcomingSchedule = await SchedulingService.GetUpcomingAsync(7);
+
+        _totalDonations = donations.Count;
+        _warehousedItems = warehousedItems.Count;
+        _activeOrganizations = organizations.Count;
+        _activeVolunteers = volunteers.Count;
+        _recentDonations = donations.OrderByDescending(d => d.DateReceived).Take(5).ToList();
+        _loading = false;
+    }
+
+    private static Color GetDonationStatusColor(DonationStatus status) => status switch
+    {
+        DonationStatus.Pending => Color.Warning,
+        DonationStatus.Scheduled => Color.Info,
+        DonationStatus.PickedUp => Color.Primary,
+        DonationStatus.Received or DonationStatus.Completed => Color.Success,
+        _ => Color.Default
+    };
+
+    private static Color GetScheduleStatusColor(PickupDeliveryStatus status) => status switch
+    {
+        PickupDeliveryStatus.Scheduled => Color.Info,
+        PickupDeliveryStatus.InProgress => Color.Warning,
+        PickupDeliveryStatus.Completed => Color.Success,
+        PickupDeliveryStatus.Cancelled => Color.Error,
+        _ => Color.Default
+    };
+}

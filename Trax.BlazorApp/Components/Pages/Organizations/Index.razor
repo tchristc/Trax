@@ -1,0 +1,138 @@
+@page "/organizations"
+@inject IOrganizationService OrganizationService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Organizations - Trax</PageTitle>
+
+<div class="d-flex align-center justify-space-between mb-4">
+    <MudText Typo="Typo.h4">Organizations</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="CreateOrganization">
+        New Organization
+    </MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Elevation="2">
+        <MudTable T="Organization" Items="_organizations" Hover Dense Striped Filter="_filterFunc">
+            <ToolBarContent>
+                <MudTextField @bind-Value="_search" Placeholder="Search by name or contact..."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium" Immediate Class="mt-0 flex-grow-1" />
+                <MudSpacer />
+                <MudToggleIconButton @bind-Toggled="_activeOnly"
+                                     Icon="@Icons.Material.Filled.ToggleOff"
+                                     ToggledIcon="@Icons.Material.Filled.ToggleOn"
+                                     ToggledColor="Color.Primary"
+                                     Title="@(_activeOnly ? "Showing Active" : "Showing All")" />
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<Organization, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+                <MudTh>Contact</MudTh>
+                <MudTh>Email</MudTh>
+                <MudTh>Phone</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh Style="text-align:right">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name"><b>@context.Name</b></MudTd>
+                <MudTd DataLabel="Contact">@(context.ContactName ?? "—")</MudTd>
+                <MudTd DataLabel="Email">@(context.Email ?? "—")</MudTd>
+                <MudTd DataLabel="Phone">@(context.Phone ?? "—")</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                </MudTd>
+                <MudTd Style="text-align:right">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => EditOrganization(context))" Title="Edit" />
+                    <MudIconButton Icon="@(context.IsActive ? Icons.Material.Filled.ToggleOff : Icons.Material.Filled.ToggleOn)"
+                                   Size="Size.Small" Color="@(context.IsActive ? Color.Warning : Color.Success)"
+                                   OnClick="@(() => ToggleActive(context))"
+                                   Title="@(context.IsActive ? "Deactivate" : "Activate")" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4" Color="Color.Secondary">No organizations found.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private IReadOnlyList<Organization> _organizations = [];
+    private string _search = string.Empty;
+    private bool _activeOnly;
+
+    private Func<Organization, bool> _filterFunc => x =>
+    {
+        if (_activeOnly && !x.IsActive) return false;
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return x.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+               (x.ContactName?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+               (x.Email?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false);
+    };
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        _organizations = await OrganizationService.GetAllOrganizationsAsync();
+        _loading = false;
+    }
+
+    private async Task CreateOrganization()
+    {
+        var parameters = new DialogParameters<OrganizationFormDialog>
+        {
+            { x => x.Organization, new Organization() }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<OrganizationFormDialog>("Create Organization", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is Organization org)
+        {
+            await OrganizationService.CreateOrganizationAsync(org);
+            await LoadData();
+            Snackbar.Add("Organization created.", Severity.Success);
+        }
+    }
+
+    private async Task EditOrganization(Organization org)
+    {
+        var parameters = new DialogParameters<OrganizationFormDialog>
+        {
+            { x => x.Organization, org }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<OrganizationFormDialog>("Edit Organization", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is Organization updated)
+        {
+            await OrganizationService.UpdateOrganizationAsync(updated);
+            await LoadData();
+            Snackbar.Add("Organization updated.", Severity.Success);
+        }
+    }
+
+    private async Task ToggleActive(Organization org)
+    {
+        org.IsActive = !org.IsActive;
+        await OrganizationService.UpdateOrganizationAsync(org);
+        await LoadData();
+        Snackbar.Add($"Organization {(org.IsActive ? "activated" : "deactivated")}.", Severity.Info);
+    }
+}

@@ -1,0 +1,151 @@
+@page "/inventory"
+@inject IInventoryService InventoryService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Inventory - Trax</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom>Inventory</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Elevation="2">
+        <MudTable T="DonationItem" Items="_items" Hover Dense Striped Filter="_filterFunc">
+            <ToolBarContent>
+                <MudTextField @bind-Value="_search" Placeholder="Search by item name..."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium" Immediate Class="mt-0 flex-grow-1" />
+                <MudSpacer />
+                <MudSelect T="Guid?" @bind-Value="_categoryFilter" Label="Category" Clearable
+                           Style="min-width:180px" Class="ml-4">
+                    @foreach (var cat in _categories)
+                    {
+                        <MudSelectItem T="Guid?" Value="(Guid?)cat.Id">@cat.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="ItemStatus?" @bind-Value="_statusFilter" Label="Status" Clearable
+                           Style="min-width:160px" Class="ml-4">
+                    @foreach (var s in Enum.GetValues<ItemStatus>())
+                    {
+                        <MudSelectItem T="ItemStatus?" Value="(ItemStatus?)s">@s</MudSelectItem>
+                    }
+                </MudSelect>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<DonationItem, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+                <MudTh>Category</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DonationItem, object>(x => x.Condition)">Condition</MudTableSortLabel></MudTh>
+                <MudTh>Qty</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DonationItem, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">
+                    <MudText Typo="Typo.body2"><b>@context.Name</b></MudText>
+                    @if (!string.IsNullOrEmpty(context.Description))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Description</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Category">@GetCategoryName(context.CategoryId)</MudTd>
+                <MudTd DataLabel="Condition">
+                    <MudChip T="string" Size="Size.Small" Color="@GetConditionColor(context.Condition)">@context.Condition</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Qty">@context.Quantity</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                </MudTd>
+                <MudTd Style="text-align:right">
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense Title="Change Status">
+                        @foreach (var s in Enum.GetValues<ItemStatus>())
+                        {
+                            var status = s;
+                            <MudMenuItem OnClick="@(() => UpdateStatus(context, status))">
+                                Set: @status
+                            </MudMenuItem>
+                        }
+                    </MudMenu>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4" Color="Color.Secondary">No items found.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </MudPaper>
+
+    <MudGrid Class="mt-4">
+        @foreach (var group in _statusGroups)
+        {
+            <MudItem xs="6" sm="4" md="2">
+                <MudPaper Elevation="1" Class="pa-3 text-center">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@group.Key</MudText>
+                    <MudText Typo="Typo.h5">@group.Count</MudText>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private IReadOnlyList<DonationItem> _items = [];
+    private IReadOnlyList<ItemCategory> _categories = [];
+    private string _search = string.Empty;
+    private Guid? _categoryFilter;
+    private ItemStatus? _statusFilter;
+
+    private IEnumerable<(string Key, int Count)> _statusGroups =>
+        Enum.GetValues<ItemStatus>().Select(s => (s.ToString(), _items.Count(i => i.Status == s)));
+
+    private Func<DonationItem, bool> _filterFunc => x =>
+    {
+        if (_categoryFilter.HasValue && x.CategoryId != _categoryFilter.Value) return false;
+        if (_statusFilter.HasValue && x.Status != _statusFilter.Value) return false;
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return x.Name.Contains(_search, StringComparison.OrdinalIgnoreCase);
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        _items = await InventoryService.GetAllItemsAsync();
+        _categories = await InventoryService.GetCategoriesAsync();
+        _loading = false;
+    }
+
+    private async Task UpdateStatus(DonationItem item, ItemStatus status)
+    {
+        await InventoryService.UpdateItemStatusAsync(item.Id, status);
+        _items = await InventoryService.GetAllItemsAsync();
+        Snackbar.Add($"'{item.Name}' status updated to {status}.", Severity.Info);
+    }
+
+    private string GetCategoryName(Guid categoryId) =>
+        _categories.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "—";
+
+    private static Color GetStatusColor(ItemStatus status) => status switch
+    {
+        ItemStatus.Donated => Color.Default,
+        ItemStatus.Received => Color.Info,
+        ItemStatus.Warehoused => Color.Primary,
+        ItemStatus.Reserved => Color.Warning,
+        ItemStatus.Delivered => Color.Success,
+        _ => Color.Default
+    };
+
+    private static Color GetConditionColor(ItemCondition condition) => condition switch
+    {
+        ItemCondition.New => Color.Success,
+        ItemCondition.Good => Color.Primary,
+        ItemCondition.Fair => Color.Warning,
+        ItemCondition.Poor => Color.Error,
+        _ => Color.Default
+    };
+}

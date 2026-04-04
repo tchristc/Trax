@@ -1,0 +1,135 @@
+@page "/users"
+@inject IUserService UserService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Users - Trax</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom>User Management</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Elevation="2">
+        <MudTable T="AppUser" Items="_users" Hover Dense Striped Filter="_filterFunc">
+            <ToolBarContent>
+                <MudTextField @bind-Value="_search" Placeholder="Search by name or email..."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium" Immediate Class="mt-0 flex-grow-1" />
+                <MudSpacer />
+                <MudSelect T="UserRole?" @bind-Value="_roleFilter" Label="Role" Clearable
+                           Style="min-width:160px" Class="ml-4">
+                    @foreach (var r in Enum.GetValues<UserRole>())
+                    {
+                        <MudSelectItem T="UserRole?" Value="(UserRole?)r">@r</MudSelectItem>
+                    }
+                </MudSelect>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>User</MudTh>
+                <MudTh>Email</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<AppUser, object>(x => x.Role)">Role</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<AppUser, object>(x => x.CreatedAt)">Joined</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="User">
+                    <div class="d-flex align-center gap-2">
+                        <MudAvatar Color="@GetRoleColor(context.Role)" Size="Size.Small">
+                            @(context.DisplayName.Length > 0 ? context.DisplayName[0].ToString() : "?")
+                        </MudAvatar>
+                        <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Email">@context.Email</MudTd>
+                <MudTd DataLabel="Role">
+                    <MudChip T="string" Size="Size.Small" Color="@GetRoleColor(context.Role)">@context.Role</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Joined">@context.CreatedAt.ToLocalTime().ToString("MM/dd/yyyy")</MudTd>
+                <MudTd Style="text-align:right">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AssignmentInd"
+                               OnClick="@(() => AssignRole(context))">
+                        Change Role
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4" Color="Color.Secondary">No users found.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </MudPaper>
+
+    <MudGrid Class="mt-4">
+        @foreach (var group in _roleGroups)
+        {
+            <MudItem xs="6" sm="4" md="2">
+                <MudPaper Elevation="1" Class="pa-3 text-center">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@group.Role</MudText>
+                    <MudText Typo="Typo.h5">@group.Count</MudText>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private IReadOnlyList<AppUser> _users = [];
+    private string _search = string.Empty;
+    private UserRole? _roleFilter;
+
+    private IEnumerable<(string Role, int Count)> _roleGroups =>
+        Enum.GetValues<UserRole>().Select(r => (r.ToString(), _users.Count(u => u.Role == r)));
+
+    private Func<AppUser, bool> _filterFunc => x =>
+    {
+        if (_roleFilter.HasValue && x.Role != _roleFilter.Value) return false;
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return x.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+               x.Email.Contains(_search, StringComparison.OrdinalIgnoreCase);
+    };
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        _users = await UserService.GetAllUsersAsync();
+        _loading = false;
+    }
+
+    private async Task AssignRole(AppUser user)
+    {
+        var parameters = new DialogParameters<RoleAssignDialog>
+        {
+            { x => x.User, user }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<RoleAssignDialog>("Change Role", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is UserRole role)
+        {
+            await UserService.AssignRoleAsync(user.Id, role);
+            await LoadData();
+            Snackbar.Add($"Role updated to {role} for {user.DisplayName}.", Severity.Success);
+        }
+    }
+
+    private static Color GetRoleColor(UserRole role) => role switch
+    {
+        UserRole.SuperAdmin => Color.Error,
+        UserRole.Admin => Color.Warning,
+        UserRole.Volunteer => Color.Primary,
+        UserRole.Organization => Color.Secondary,
+        UserRole.Donor => Color.Info,
+        UserRole.None => Color.Default,
+        _ => Color.Default
+    };
+}

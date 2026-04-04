@@ -1,0 +1,32 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Change Role</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Assign a role to <b>@User.DisplayName</b> (@User.Email)
+        </MudText>
+        <MudSelect T="UserRole" @bind-Value="_selectedRole" Label="Role" Required="true">
+            @foreach (var r in Enum.GetValues<UserRole>())
+            {
+                <MudSelectItem T="UserRole" Value="r">@r</MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public AppUser User { get; set; } = new();
+
+    private UserRole _selectedRole;
+
+    protected override void OnParametersSet() => _selectedRole = User.Role;
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(_selectedRole));
+    private void Cancel() => MudDialog.Cancel();
+}

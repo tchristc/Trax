@@ -1,30 +1,27 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Trax.BlazorApp</a>
+﻿<MudNavMenu>
+    <div class="pa-4">
+        <MudText Typo="Typo.subtitle1" Color="Color.Primary"><b>Trax</b></MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Donation Tracker</MudText>
     </div>
-</div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+    <MudDivider />
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+    <MudNavLink Href="/donations" Icon="@Icons.Material.Filled.CardGiftcard">Donations</MudNavLink>
+    <MudNavLink Href="/inventory" Icon="@Icons.Material.Filled.Inventory2">Inventory</MudNavLink>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
+    <MudDivider Class="my-2" />
+    <MudText Typo="Typo.overline" Class="px-4 mud-text-secondary">People</MudText>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-    </nav>
-</div>
+    <MudNavLink Href="/organizations" Icon="@Icons.Material.Filled.Business">Organizations</MudNavLink>
+    <MudNavLink Href="/volunteers" Icon="@Icons.Material.Filled.People">Volunteers</MudNavLink>
 
+    <MudDivider Class="my-2" />
+
+    <MudNavLink Href="/scheduling" Icon="@Icons.Material.Filled.Schedule">Scheduling</MudNavLink>
+
+    <MudDivider Class="my-2" />
+    <MudText Typo="Typo.overline" Class="px-4 mud-text-secondary">Admin</MudText>
+
+    <MudNavLink Href="/users" Icon="@Icons.Material.Filled.ManageAccounts">Users</MudNavLink>
+</MudNavMenu>

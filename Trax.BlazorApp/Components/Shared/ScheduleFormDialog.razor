@@ -1,0 +1,100 @@
+@inject IOrganizationService OrganizationService
+@inject IDonationService DonationService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Schedule Pickup / Delivery</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="PickupDeliveryType" @bind-Value="Schedule.Type" Label="Type" Required="true">
+                        @foreach (var t in Enum.GetValues<PickupDeliveryType>())
+                        {
+                            <MudSelectItem T="PickupDeliveryType" Value="t">@t</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="PickupDeliveryStatus" @bind-Value="Schedule.Status" Label="Status">
+                        @foreach (var s in Enum.GetValues<PickupDeliveryStatus>())
+                        {
+                            <MudSelectItem T="PickupDeliveryStatus" Value="s">@s</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_scheduledDate" Label="Scheduled Date"
+                                   Required="true" RequiredError="Date is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTimePicker @bind-Time="_scheduledTime" Label="Scheduled Time" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="Schedule.Address" Label="Address" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="Guid?" @bind-Value="Schedule.DonationId" Label="Linked Donation" Clearable>
+                        @foreach (var d in _donations)
+                        {
+                            <MudSelectItem T="Guid?" Value="(Guid?)d.Id">@d.DonorName (@d.DateReceived.ToLocalTime().ToString("MM/dd/yyyy"))</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="Guid?" @bind-Value="Schedule.OrganizationId" Label="Linked Organization" Clearable>
+                        @foreach (var o in _organizations)
+                        {
+                            <MudSelectItem T="Guid?" Value="(Guid?)o.Id">@o.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="Schedule.Notes" Label="Notes" Lines="2" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="!_isValid">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public PickupDelivery Schedule { get; set; } = new();
+
+    private MudForm _form = default!;
+    private bool _isValid;
+    private DateTime? _scheduledDate;
+    private TimeSpan? _scheduledTime;
+    private IReadOnlyList<Organization> _organizations = [];
+    private IReadOnlyList<Donation> _donations = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _organizations = await OrganizationService.GetActiveOrganizationsAsync();
+        _donations = await DonationService.GetAllDonationsAsync();
+
+        var dt = Schedule.ScheduledDate == default ? DateTime.Now : Schedule.ScheduledDate.ToLocalTime();
+        _scheduledDate = dt.Date;
+        _scheduledTime = dt.TimeOfDay;
+    }
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_form.IsValid) return;
+
+        var date = _scheduledDate ?? DateTime.Today;
+        var time = _scheduledTime ?? TimeSpan.Zero;
+        Schedule.ScheduledDate = new DateTime(date.Year, date.Month, date.Day,
+            time.Hours, time.Minutes, 0, DateTimeKind.Local).ToUniversalTime();
+
+        MudDialog.Close(DialogResult.Ok(Schedule));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

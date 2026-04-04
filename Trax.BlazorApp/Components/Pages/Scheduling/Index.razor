@@ -1,0 +1,194 @@
+@page "/scheduling"
+@inject ISchedulingService SchedulingService
+@inject IVolunteerService VolunteerService
+@inject IOrganizationService OrganizationService
+@inject IDonationService DonationService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Scheduling - Trax</PageTitle>
+
+<div class="d-flex align-center justify-space-between mb-4">
+    <MudText Typo="Typo.h4">Scheduling</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="CreateSchedule">
+        Schedule Pickup / Delivery
+    </MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Elevation="2">
+        <MudTable T="PickupDelivery" Items="_schedule" Hover Dense Striped Filter="_filterFunc">
+            <ToolBarContent>
+                <MudTextField @bind-Value="_search" Placeholder="Search by address or notes..."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium" Immediate Class="mt-0 flex-grow-1" />
+                <MudSpacer />
+                <MudSelect T="PickupDeliveryType?" @bind-Value="_typeFilter" Label="Type" Clearable
+                           Style="min-width:140px" Class="ml-4">
+                    @foreach (var t in Enum.GetValues<PickupDeliveryType>())
+                    {
+                        <MudSelectItem T="PickupDeliveryType?" Value="(PickupDeliveryType?)t">@t</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="PickupDeliveryStatus?" @bind-Value="_statusFilter" Label="Status" Clearable
+                           Style="min-width:160px" Class="ml-4">
+                    @foreach (var s in Enum.GetValues<PickupDeliveryStatus>())
+                    {
+                        <MudSelectItem T="PickupDeliveryStatus?" Value="(PickupDeliveryStatus?)s">@s</MudSelectItem>
+                    }
+                </MudSelect>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Type</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<PickupDelivery, object>(x => x.ScheduledDate)">Date</MudTableSortLabel></MudTh>
+                <MudTh>Address</MudTh>
+                <MudTh>Organization</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh Style="text-align:right">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@(context.Type == PickupDeliveryType.Pickup ? Color.Info : Color.Secondary)">
+                        @context.Type
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Date">@context.ScheduledDate.ToLocalTime().ToString("MM/dd/yyyy h:mm tt")</MudTd>
+                <MudTd DataLabel="Address">@(context.Address ?? "—")</MudTd>
+                <MudTd DataLabel="Organization">@GetOrganizationName(context.OrganizationId)</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                </MudTd>
+                <MudTd Style="text-align:right">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => EditSchedule(context))" Title="Edit" />
+                    <MudIconButton Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Small" Color="Color.Secondary"
+                                   OnClick="@(() => AssignVolunteer(context))" Title="Assign Volunteer" />
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense>
+                        @foreach (var s in Enum.GetValues<PickupDeliveryStatus>())
+                        {
+                            var status = s;
+                            <MudMenuItem OnClick="@(() => UpdateStatus(context, status))">Set: @status</MudMenuItem>
+                        }
+                    </MudMenu>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4" Color="Color.Secondary">No scheduled pickups or deliveries.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private IReadOnlyList<PickupDelivery> _schedule = [];
+    private IReadOnlyList<Organization> _organizations = [];
+    private IReadOnlyList<Volunteer> _volunteers = [];
+    private string _search = string.Empty;
+    private PickupDeliveryType? _typeFilter;
+    private PickupDeliveryStatus? _statusFilter;
+
+    private Func<PickupDelivery, bool> _filterFunc => x =>
+    {
+        if (_typeFilter.HasValue && x.Type != _typeFilter.Value) return false;
+        if (_statusFilter.HasValue && x.Status != _statusFilter.Value) return false;
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return (x.Address?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+               (x.Notes?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false);
+    };
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        _schedule = await SchedulingService.GetAllAsync();
+        _organizations = await OrganizationService.GetAllOrganizationsAsync();
+        _volunteers = await VolunteerService.GetActiveVolunteersAsync();
+        _loading = false;
+    }
+
+    private async Task CreateSchedule()
+    {
+        var parameters = new DialogParameters<ScheduleFormDialog>
+        {
+            { x => x.Schedule, new PickupDelivery { ScheduledDate = DateTime.UtcNow.AddDays(1) } }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<ScheduleFormDialog>("Schedule Entry", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is PickupDelivery pd)
+        {
+            await SchedulingService.SchedulePickupAsync(pd);
+            await LoadData();
+            Snackbar.Add("Scheduled successfully.", Severity.Success);
+        }
+    }
+
+    private async Task EditSchedule(PickupDelivery pd)
+    {
+        var parameters = new DialogParameters<ScheduleFormDialog>
+        {
+            { x => x.Schedule, pd }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<ScheduleFormDialog>("Edit Schedule", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled)
+            await LoadData();
+    }
+
+    private async Task AssignVolunteer(PickupDelivery pd)
+    {
+        if (!_volunteers.Any())
+        {
+            Snackbar.Add("No active volunteers available.", Severity.Warning);
+            return;
+        }
+
+        var items = _volunteers.Select(v => new { v.Id, Name = $"{v.FirstName} {v.LastName}" }).ToList();
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+        var parameters = new DialogParameters<AssignVolunteerDialog>
+        {
+            { x => x.Volunteers, _volunteers },
+            { x => x.PickupDeliveryId, pd.Id }
+        };
+        var dialog = await DialogService.ShowAsync<AssignVolunteerDialog>("Assign Volunteer", parameters, options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is Guid volunteerId)
+        {
+            await SchedulingService.AssignVolunteerAsync(pd.Id, volunteerId);
+            await LoadData();
+            Snackbar.Add("Volunteer assigned.", Severity.Success);
+        }
+    }
+
+    private async Task UpdateStatus(PickupDelivery pd, PickupDeliveryStatus status)
+    {
+        await SchedulingService.UpdateStatusAsync(pd.Id, status);
+        await LoadData();
+        Snackbar.Add($"Status updated to {status}.", Severity.Info);
+    }
+
+    private string GetOrganizationName(Guid? orgId) =>
+        orgId.HasValue ? (_organizations.FirstOrDefault(o => o.Id == orgId.Value)?.Name ?? "—") : "—";
+
+    private static Color GetStatusColor(PickupDeliveryStatus status) => status switch
+    {
+        PickupDeliveryStatus.Scheduled => Color.Info,
+        PickupDeliveryStatus.InProgress => Color.Warning,
+        PickupDeliveryStatus.Completed => Color.Success,
+        PickupDeliveryStatus.Cancelled => Color.Error,
+        _ => Color.Default
+    };
+}
