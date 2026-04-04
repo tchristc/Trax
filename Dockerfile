@@ -7,10 +7,10 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
-COPY ["Trax.BlazorApp/Trax.BlazorApp.csproj",     "Trax.BlazorApp/"]
-COPY ["Trax.Application/Trax.Application.csproj", "Trax.Application/"]
+COPY ["Trax.BlazorApp/Trax.BlazorApp.csproj",          "Trax.BlazorApp/"]
+COPY ["Trax.Application/Trax.Application.csproj",       "Trax.Application/"]
 COPY ["Trax.Infrastructure/Trax.Infrastructure.csproj", "Trax.Infrastructure/"]
-COPY ["Trax.Domain/Trax.Domain.csproj",           "Trax.Domain/"]
+COPY ["Trax.Domain/Trax.Domain.csproj",                 "Trax.Domain/"]
 
 RUN dotnet restore "Trax.BlazorApp/Trax.BlazorApp.csproj"
 
@@ -21,5 +21,5 @@ RUN dotnet publish "Trax.BlazorApp.csproj" -c $BUILD_CONFIGURATION -o /app/publi
 
 FROM base AS final
 WORKDIR /app
-COPY --from=publish /app/publish .
+COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "Trax.BlazorApp.dll"]
